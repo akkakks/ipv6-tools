@@ -11,10 +11,14 @@ class PortForwardMixin(object):
 class ConnectionHandler(SocketServer.BaseRequestHandler, PortForwardMixin):
 
     def log_message(self, message):
-        sys.stdout.write('%s:%s -- [%s] %s\n' % (self.client_address[0], self.client_address[1], time.ctime(), message))
+        address = '%s:%s' % (self.client_address[0] if '.' in self.client_address[0] else '[%s]' % self.client_address[0], self.client_address[1])
+        sys.stdout.write('%s -- [%s] %s\n' % (address, time.ctime(), message))
 
     def setup(self):
-        remote_host, remote_port = self.HOSTS[int(ord(os.urandom(1))/256.0*len(self.HOSTS))]
+        if len(self.HOSTS) > 1:
+            remote_host, remote_port = self.HOSTS[int(ord(os.urandom(1))/256.0*len(self.HOSTS))]
+        else:
+            remote_host, remote_port = self.HOSTS[0]
         (soc_family, _, _, _, address) = socket.getaddrinfo(remote_host, remote_port)[0]
         self.remote = socket.socket(soc_family)
         self.remote.connect(address[:2])
