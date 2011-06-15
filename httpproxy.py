@@ -24,6 +24,30 @@ def resolve_netloc(netloc, defaultport=80):
         host = host.strip('[]')
     return host, port
 
+def socket_forward(local, remote, timeout=60, tick=2, maxping=None, maxpong=None):
+    count = timeout // tick
+    try:
+        while 1:
+            count -= 1
+            (ins, _, errors) = select.select([local, remote], [], [local, remote], tick)
+            if errors:
+                break
+            if ins:
+                for sock in ins:
+                    data = sock.recv(8192)
+                    if data:
+                        if sock is local:
+                            remote.send(data)
+                            count = maxping or timeout // tick
+                        else:
+                            local.send(data)
+                            count = maxpong or timeout // tick
+            if count == 0:
+                break
+    except Exception, ex:
+        logging.warning('socket_forward error=%s', ex)
+        raise
+
 class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def address_string(self):
@@ -66,7 +90,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.log_request(200)
             self.wfile.write('%s 200 Connection established\r\n' % self.protocol_version)
             self.wfile.write('Proxy-agent: %s\r\n\r\n' % self.version_string())
-            self._read_write(self.connection, soc)
+            socket_forward(self.connection, soc, timeout=300)
         except Exception, ex:
             logging.exception('SimpleProxyHandler.do_CONNECT Error, %s', ex)
             self.send_error(502, 'SimpleProxyHandler.do_CONNECT Error (%s)' % ex)
@@ -90,7 +114,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if self.command == 'POST':
                 data += self.rfile.read()
             soc.send(data)
-            self._read_write(self.connection, soc)
+            socket_forward(self.connection, soc, timeout=300)
         except Exception, ex:
             logging.exception('SimpleProxyHandler.do_GET Error, %s', ex)
             self.send_error(502, 'SimpleProxyHandler.do_GET Error (%s)' % ex)
@@ -100,29 +124,6 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     conn.close()
                 except:
                     pass
-
-    def _read_write(self, local, remote):
-        DIRECT_KEEPLIVE = 60
-        DIRECT_TICK = 2
-        count = DIRECT_KEEPLIVE // DIRECT_TICK
-        while 1:
-            count -= 1
-            (ins, _, errors) = select.select([local, remote], [], [local, remote], DIRECT_TICK)
-            if errors:
-                break
-            if ins:
-                for sock in ins:
-                    data = sock.recv(8192)
-                    if data:
-                        if sock is local:
-                            remote.send(data)
-                            # if packets lost in 20 secs, maybe ssl connection was dropped by GFW
-                            count = 10
-                        else:
-                            local.send(data)
-                            count = DIRECT_KEEPLIVE // DIRECT_TICK
-            if count == 0:
-                break
 
     do_GET = do_METHOD
     do_POST = do_METHOD
