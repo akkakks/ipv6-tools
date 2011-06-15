@@ -13,6 +13,17 @@ import threading, Queue
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - - %(asctime)s %(message)s', datefmt='[%d/%b/%Y %H:%M:%S]')
 
+def resolve_netloc(netloc, defaultport=80):
+    if netloc.rfind(':') > netloc.rfind(']'):
+        host, _, port = netloc.rpartition(':')
+        port = int(port)
+    else:
+        host = netloc
+        port = defaultport
+    if host[0] == '[':
+        host = host.strip('[]')
+    return host, port
+
 class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def address_string(self):
@@ -50,7 +61,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_CONNECT(self):
         try:
             logging.info('CONNECT %s' % self.path)
-            host, _, port = self.path.rpartition(':')
+            host, port = resolve_netloc(self.path, 443)
             soc = socket.create_connection((host, port))
             self.log_request(200)
             self.wfile.write('%s 200 Connection established\r\n' % self.protocol_version)
@@ -66,18 +77,11 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 except:
                     pass
 
-    def resolve_netloc(self, netloc, defaultport=80):
-        if netloc.find(':') > netloc.find(']'):
-            host, _, port = netloc.rpartition(':')
-            return host, int(port)
-        else:
-            return netloc, defaultport
-
     def do_METHOD(self):
         try:
             logging.info('%s %r' % (self.command, self.path))
             scheme, netloc, path, params, query, fragment = urlparse.urlparse(self.path, 'http')
-            host, port = self.resolve_netloc(netloc)
+            host, port = resolve_netloc(netloc, 80)
             soc = socket.create_connection((host, port))
             data = '%s %s %s\r\n'  % (self.command, urlparse.urlunparse(('', '', path, params, query, '')), self.request_version)
             data += ''.join('%s: %s\r\n' % (k, self.headers[k]) for k in self.headers if not k.lower().startswith('proxy-'))
@@ -132,15 +136,12 @@ class LocalProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         print 'usage: httpproxy.py ip [port]'
-        print 'example: httpproxy.py :: 8080'
+        print 'example: httpproxy.py [::]:8080'
         sys.exit(0)
-    listen_ip = sys.argv[1]
-    listen_port = int(sys.argv[2]) if len(sys.argv) == 3 else 8080
-    if ':' in listen_ip:
+    address = resolve_netloc(sys.argv[1], 8080)
+    if ':' in address[0]:
         SocketServer.TCPServer.address_family = socket.AF_INET6
-        server = SocketServer.ThreadingTCPServer((listen_ip.strip('[]'), listen_port), SimpleProxyHandler)
-    else:
-        server = SocketServer.ThreadingTCPServer((listen_ip, listen_port), SimpleProxyHandler)
+    server = SocketServer.ThreadingTCPServer(address, SimpleProxyHandler)
     sa = server.socket.getsockname()
     print "Serving Socket on", sa[0], "port", sa[1], "..."
     server.serve_forever()
