@@ -111,8 +111,9 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             data += ''.join('%s: %s\r\n' % (k, self.headers[k]) for k in self.headers if not k.lower().startswith('proxy-'))
             data += 'Connection: close\r\n'
             data += '\r\n'
-            if self.command == 'POST':
-                data += self.rfile.read()
+            content_length = int(self.headers.get('content-length', 0))
+            if content_length > 0:
+                data += self.rfile.read(content_length)
             soc.send(data)
             socket_forward(self.connection, soc, timeout=300)
         except Exception, ex:
