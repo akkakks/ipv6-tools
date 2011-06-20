@@ -13,6 +13,14 @@ import threading, Queue
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - - %(asctime)s %(message)s', datefmt='[%d/%b/%Y %H:%M:%S]')
 
+ProxyAuthorization = {
+                        'enable' : True,
+                        'user'   : {
+                                        'test' : '123456',
+                                        'user' : 'pass',
+                                   }
+                     }
+
 def resolve_netloc(netloc, defaultport=80):
     if netloc.rfind(':') > netloc.rfind(']'):
         host, _, port = netloc.rpartition(':')
@@ -95,15 +103,30 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             logging.exception('SimpleProxyHandler.do_CONNECT Error, %s', ex)
             self.send_error(502, 'SimpleProxyHandler.do_CONNECT Error (%s)' % ex)
         finally:
-            for conn in [self.connection, soc]:
-                try:
-                    conn.close()
-                except:
-                    pass
+            try:
+                self.connection.close()
+            except:
+                pass
+            try:
+                soc.close()
+            except:
+                pass
 
     def do_METHOD(self):
         try:
             logging.info('%s %r' % (self.command, self.path))
+            if ProxyAuthorization['enable']:
+                if 'proxy-authorization' not in self.headers:
+                    return self.send_error(401, 'You need set your username/password for proxy.')
+                auth = self.headers['proxy-authorization']
+                authmethod, authdata = auth.split()
+                if authmethod.lower() != 'basic':
+                    return self.send_error(502, 'Proxy-Authorization method %r is not supported!' % authmethod)
+                username, password = authdata.decode('base64').split(':', 1)
+                if username not in ProxyAuthorization['user']:
+                    return self.send_error(403, 'Wrong Proxy-Authorization Username=%r' % username)
+                if ProxyAuthorization['user'][username] != password:
+                    return self.send_error(403, 'Wrong Proxy-Authorization Password=%r' % password)
             scheme, netloc, path, params, query, fragment = urlparse.urlparse(self.path, 'http')
             host, port = resolve_netloc(netloc, 80)
             soc = socket.create_connection((host, port))
@@ -120,11 +143,14 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             logging.exception('SimpleProxyHandler.do_GET Error, %s', ex)
             self.send_error(502, 'SimpleProxyHandler.do_GET Error (%s)' % ex)
         finally:
-            for conn in [self.connection, soc]:
-                try:
-                    conn.close()
-                except:
-                    pass
+            try:
+                self.connection.close()
+            except:
+                pass
+            try:
+                soc.close()
+            except:
+                pass
 
     do_GET = do_METHOD
     do_POST = do_METHOD
