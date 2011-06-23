@@ -8,6 +8,17 @@ usage: python httpserver.py 443 [-ssl] [-6]
 import sys,os, re
 import SimpleHTTPServer, SocketServer, socket, ssl
 
+def resolve_netloc(netloc, defaultport=80):
+    if netloc.rfind(':') > netloc.rfind(']'):
+        host, _, port = netloc.rpartition(':')
+        port = int(port)
+    else:
+        host = netloc
+        port = defaultport
+    if host[0] == '[':
+        host = host.strip('[]')
+    return host, port
+
 class HTTPSMixIn:
     def setup(self):
         SSL_PEM_FILENAME = os.path.splitext(__file__)[0] + '.pem'
@@ -19,14 +30,13 @@ class SimpleHTTPSRequestHandler(HTTPSMixIn, SimpleHTTPServer.SimpleHTTPRequestHa
     pass
 
 if __name__ == '__main__':
-    RequestHandler = SimpleHTTPSRequestHandler if '-ssl' in sys.argv else SimpleHTTPServer.SimpleHTTPRequestHandler
-    SocketServer.TCPServer.address_family = socket.AF_INET6 if '-6' in sys.argv else socket.AF_INET
+    RequestHandler = SimpleHTTPServer.SimpleHTTPRequestHandler
+    if '-ssl' in sys.argv:
+        RequestHandler = SimpleHTTPSRequestHandler
+        sys.argv.remove('-ssl')
+    address = resolve_netloc(sys.argv[1])
     SocketServer.ThreadingTCPServer.allow_reuse_address = 1
-    try:
-        port = int([p for p in sys.argv[1:] if not p.startswith('-')][0])
-    except:
-        port = 80
-    httpd = SocketServer.ThreadingTCPServer(('', port), RequestHandler)
-    sa = httpd.socket.getsockname()
-    print "Serving HTTP(S) on", sa[0], "port", sa[1], "..."
+    SocketServer.TCPServer.address_family = socket.AF_INET6 if ':' in address[0] else socket.AF_INET
+    httpd = SocketServer.ThreadingTCPServer(address, RequestHandler)
+    print "Serving HTTP(S) on", address[0], "port", address[1], "..."
     httpd.serve_forever()
