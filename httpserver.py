@@ -1,5 +1,5 @@
 '''
-httpserver.py - CGI HTTP(S) server supporting SSL/IPv6.
+httpserver.py - Simple HTTP(S) server supporting SSL/IPv6.
 
 - the default port is 80.
 
