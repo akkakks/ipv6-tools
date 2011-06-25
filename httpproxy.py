@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# a tiny http proxy support https/auth/parentProxy
 
 __version__ = 'beta'
 __author__ =  'phus.lu@gmail.com'
@@ -51,6 +52,7 @@ def socket_forward(local, remote, timeout=60, tick=2, maxping=None, maxpong=None
 class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     Authorization = {}
+    ParentProxy = ()
 
     def address_string(self):
         return '%s:%s' % self.client_address[:2]
@@ -88,10 +90,16 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         try:
             logging.info('CONNECT %s' % self.path)
             host, port = resolve_netloc(self.path, 443)
-            soc = socket.create_connection((host, port))
-            self.log_request(200)
-            self.wfile.write('%s 200 Connection established\r\n' % self.protocol_version)
-            self.wfile.write('Proxy-agent: %s\r\n\r\n' % self.version_string())
+            if not self.ParentProxy:
+                soc = socket.create_connection((host, port))
+                self.log_request(200)
+                self.wfile.write('%s 200 Connection established\r\n' % self.protocol_version)
+                self.wfile.write('Proxy-agent: %s\r\n\r\n' % self.version_string())
+            else:
+                proxy_host, proxy_port = self.ParentProxy
+                soc = socket.create_connection(proxy_host, proxy_port)
+                data = '%s %s %s\r\n\r\n' % (self.command, self.path, self.protocol_version)
+                soc.send(data)
             socket_forward(self.connection, soc, timeout=300)
         except Exception, ex:
             logging.exception('SimpleProxyHandler.do_CONNECT Error, %s', ex)
@@ -126,8 +134,15 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 self.path = 'http://%s%s' % (host , self.path)
             scheme, netloc, path, params, query, fragment = urlparse.urlparse(self.path, 'http')
             host, port = resolve_netloc(netloc, 80)
-            soc = socket.create_connection((host, port))
-            data = '%s %s %s\r\n'  % (self.command, urlparse.urlunparse(('', '', path, params, query, '')), self.request_version)
+            if not self.ParentProxy:
+                soc = socket.create_connection((host, port))
+                data = '%s %s %s\r\n'  % (self.command, urlparse.urlunparse(('', '', path, params, query, '')), self.request_version)
+            else:
+                proxy_host, proxy_port = self.ParentProxy
+                soc = socket.create_connection(proxy_host, proxy_port)
+                data = '%s %s %s\r\n'  % (self.command, self.path, self.request_version)
+                data += 'Host: %s\r\n' % host
+                data += 'Proxy-Connection: close\r\n'
             data += ''.join('%s: %s\r\n' % (k, self.headers[k]) for k in self.headers if not k.lower().startswith('proxy-'))
             data += 'Connection: close\r\n'
             data += '\r\n'
