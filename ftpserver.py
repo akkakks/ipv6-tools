@@ -3341,15 +3341,25 @@ class FTPServer(asyncore.dispatcher):
                     raise
         del _tasks[:]
 
+def resolve_netloc(netloc, defaultport=80):
+    if netloc.rfind(':') > netloc.rfind(']'):
+        host, _, port = netloc.rpartition(':')
+        port = int(port)
+    else:
+        host = netloc
+        port = defaultport
+    if host[0] == '[':
+        host = host.strip('[]')
+    return host, port
 
 def test():
     # cmd line usage (provide a read-only anonymous ftp server):
     # python -m pyftpdlib.ftpserver
-    dirname = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+    address = resolve_netloc(sys.argv[1], 21)
+    dirname = sys.argv[2] if len(sys.argv) > 2 else os.getcwd()
     authorizer = DummyAuthorizer()
     authorizer.add_anonymous(dirname, perm="elradfmw")
     FTPHandler.authorizer = authorizer
-    address = ('[::]', 21)
     ftpd = FTPServer(address, FTPHandler)
     ftpd.serve_forever()
 

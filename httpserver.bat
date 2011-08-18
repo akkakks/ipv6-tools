@@ -1,2 +1,2 @@
 cd /d "%~dp0"
-py.exe -c "import CGIHTTPServer,SocketServer,socket;SocketServer.ThreadingTCPServer.allow_reuse_address=1;SocketServer.TCPServer.address_family=socket.AF_INET;CGIHTTPServer.test(ServerClass=SocketServer.ThreadingTCPServer)" 80
+@py.exe -c "import CGIHTTPServer,SocketServer,socket;SocketServer.ThreadingTCPServer.allow_reuse_address=1;SocketServer.TCPServer.address_family=socket.AF_INET;CGIHTTPServer.test(ServerClass=SocketServer.ThreadingTCPServer)" 80
