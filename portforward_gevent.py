@@ -18,35 +18,46 @@ def resolve_netloc(netloc, defaultport=80):
         host = host.strip('[]')
     return host, port
 
-def io_copy(sock1, sock2, timeout=None, bufsize=4096):
-    try:
-        if timeout:
-            sock1.settimeout(timeout)
-        while 1:
-            data = sock1.recv(bufsize)
-            if not data:
-                break
-            sock2.send(data)
-    except Exception:
-        logging.exception('io_copy exception')
-    finally:
-        logging.info('end forward, closed')
-        try:
-            sock1.close()
-        except:
-            pass
-        try:
-            sock2.close()
-        except:
-            pass
+class ForwardHandler(object):
 
-def forward(client_socket, address):
-    remote_address = resolve_netloc(os.environ['remote_address'], 8080)
-    logging.info('client %r connected, try to connect remote %r', address, remote_address)
-    remote_socket  = gevent.socket.create_connection(remote_address)
-    logging.info('connect remote %r ok, begin forward', remote_address)
-    gevent.spawn(io_copy, client_socket, remote_socket).start()
-    gevent.spawn(io_copy, remote_socket, client_socket).start()
+    def __init__(self, remote_address, client_socket, address):
+        logging.info('client %r connected, try to connect remote %r', address, remote_address)
+        remote_socket  = gevent.socket.create_connection(remote_address)
+        logging.info('connect remote %r ok, begin forward', remote_address)
+        gevent.spawn(self.io_copy, client_socket, remote_socket).start()
+        gevent.spawn(self.io_copy, remote_socket, client_socket).start()
+
+    def io_copy(self, sock1, sock2, timeout=None, bufsize=4096):
+        try:
+            if timeout:
+                sock1.settimeout(timeout)
+            while 1:
+                data = sock1.recv(bufsize)
+                if not data:
+                    break
+                sock2.send(data)
+        except Exception:
+            logging.exception('io_copy exception')
+        finally:
+            logging.info('end forward, closed')
+            try:
+                sock1.close()
+            except:
+                pass
+            try:
+                sock2.close()
+            except:
+                pass
+
+class ForwardServer(gevent.server.StreamServer):
+
+    def __init__(self, remote_address, *args, **kwargs):
+        self.remote_address = remote_address
+        super(ForwardServer, self).__init__(*args, **kwargs)
+
+    def handle(self, client_socket, address):
+        gevent.spawn(ForwardHandler, self.remote_address, client_socket, address)
+
 
 if __name__=='__main__':
     if len(sys.argv) == 1:
@@ -55,8 +66,8 @@ if __name__=='__main__':
         sys.exit(0)
 
     listener = resolve_netloc(sys.argv[1], 80)
-    os.environ['remote_address'] = sys.argv[2]
+    remote_address = resolve_netloc(sys.argv[2], 80)
 
-    server = gevent.server.StreamServer(listener, forward)
+    server = ForwardServer(remote_address, listener)
     print 'Serving Socket on', listener[0], 'port', listener[1], '...'
     server.serve_forever()
