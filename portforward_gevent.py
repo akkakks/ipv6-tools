@@ -39,15 +39,9 @@ class ForwardHandler(object):
         except Exception:
             logging.exception('io_copy exception')
         finally:
-            logging.info('end forward, closed')
-            try:
-                sock1.close()
-            except:
-                pass
-            try:
-                sock2.close()
-            except:
-                pass
+            logging.info('end forward, exit')
+            sock1.close()
+            sock2.close()
 
 class ForwardServer(gevent.server.StreamServer):
 
