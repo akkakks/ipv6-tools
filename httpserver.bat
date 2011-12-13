@@ -1,2 +1,0 @@
-cd /d "%~dp0"
-python -c "import CGIHTTPServer,SocketServer,socket;socket.getfqdn=lambda x:x;SocketServer.ThreadingTCPServer.allow_reuse_address=1;SocketServer.TCPServer.address_family=socket.AF_INET;CGIHTTPServer.test(ServerClass=SocketServer.ThreadingTCPServer)" 80
