@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - - %(asctime)s %(
 
 class common(object):
     '''global config module, similar with GoAgent'''
-    LISTEN_IP      = '0.0.0.0'
+    LISTEN_IP      = '::'
     LISTEN_PORT    = 8080
 
     PROXY_ENABLE   = 0
@@ -207,5 +207,6 @@ class LocalProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
 if __name__ == '__main__':
     LocalProxyServer.address_family = (socket.AF_INET, socket.AF_INET6)[':' in common.LISTEN_IP]
-    httpd = LocalProxyServer((common.LISTEN_IP, common.LISTEN_PORT), GaeProxyHandler)
+    httpd = LocalProxyServer((common.LISTEN_IP, common.LISTEN_PORT), SimpleProxyHandler)
+    print 'serving at', httpd.server_address
     httpd.serve_forever()
